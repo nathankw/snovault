@@ -10,7 +10,7 @@
   "author": "",
   "license": "MIT",
   "files": [],
-  "repository": "ENCODE-DCC/encoded",
+  "repository": "ENCODE-DCC/snovault",
   "jest": {
     "rootDir": "src/snowflakes/static",
     "setupFiles": [
