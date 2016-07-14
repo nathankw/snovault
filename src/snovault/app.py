@@ -7,6 +7,7 @@ from pyramid.path import (
     AssetResolver,
     caller_package,
 )
+
 from pyramid.session import SignedCookieSessionFactory
 from sqlalchemy import engine_from_config
 from webob.cookies import JSONSerializer

@@ -19,15 +19,16 @@ def groupfinder(login, request):
         elif localname in ['TEST_AUTHENTICATED']:
             return ['viewing_group.SNOWFLAKE']
 
-    if namespace in ('mailto', 'remoteuser', 'persona'):
-        users = collections.by_item_type['user']
+    if namespace in ('mailto', 'remoteuser', 'webuser'):
+        users = root.by_item_type['user']
         try:
             user = users[localname]
         except KeyError:
             return None
 
     elif namespace == 'accesskey':
-        access_keys = collections.by_item_type['access_key']
+
+        access_keys = root.by_item_type['access_key']
         try:
             access_key = access_keys[localname]
         except KeyError:
