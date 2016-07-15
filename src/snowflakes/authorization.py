@@ -20,7 +20,7 @@ def groupfinder(login, request):
             return ['viewing_group.SNOWFLAKE']
 
     if namespace in ('mailto', 'remoteuser', 'webuser'):
-        users = root.by_item_type['user']
+        users = collections.by_item_type['user']
         try:
             user = users[localname]
         except KeyError:
@@ -28,7 +28,7 @@ def groupfinder(login, request):
 
     elif namespace == 'accesskey':
 
-        access_keys = root.by_item_type['access_key']
+        access_keys = collections.by_item_type['access_key']
         try:
             access_key = access_keys[localname]
         except KeyError:
