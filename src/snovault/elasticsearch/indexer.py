@@ -71,7 +71,6 @@ class IndexerState(object):
         # some goals:
         # 1) Detect and recover from interrupted cycle - working but ignored for now
         # 2) Record (double?) failures and consider blacklisting them - not tried, could do.
-        # 3) Make 2-pass indexing work
 
     # Private-ish primitives...
     def get_obj(self, id, type='meta'):
@@ -277,13 +276,6 @@ class IndexerState(object):
         self.put_list(self.todo_set, set(uuids))
         return state
 
-    def start_pass2(self, state):
-        state['pass1_took'] = self.elapsed('cycle')
-        self.put(state)
-        self.start_clock('pass2')
-        return state
-
-
     def add_errors(self, errors, finished=True):
         '''To avoid 16 worker concurency issues, errors are recorded at the end of a cycle.'''
         uuids = [err['uuid'] for err in errors]  # better be uuids!
@@ -304,9 +296,6 @@ class IndexerState(object):
 
     def finish_cycle(self, state, errors=None):
         '''Every indexing cycle must be properly closed.'''
-
-        if 'pass2' in self.clock.keys():
-            state['pass2_took'] = self.elapsed('pass2')
 
         if errors:  # By handling here, we avoid overhead and concurrency issues of uuid-level accounting
             self.add_errors(errors)
@@ -682,7 +671,6 @@ def index(request):
 
     # Currently 2 possible followup indexers (base.ini [set stage_for_followup = vis_indexer, region_indexer])
     stage_for_followup = list(request.registry.settings.get("stage_for_followup", '').replace(' ','').split(','))
-    use_2pass = False #request.registry.settings.get("index_with_2pass", False)  # defined in base.ini for encoded
 
     # May have undone uuids from prior cycle
     state = IndexerState(es, INDEX, followups=stage_for_followup)
@@ -787,19 +775,7 @@ def index(request):
 
         # Do the work...
 
-        if use_2pass:
-            log.info("indexer starting pass 1 on %d uuids", len(invalidated))
         errors = indexer.update_objects(request, invalidated, xmin, snapshot_id, restart)
-
-        if use_2pass:
-            # We need to make the recently pushed objects searchable
-            # Audit will fetch the most recent version after the refresh
-            self.es.indices.refresh(index='_all')
-            result = state.start_pass2(result)
-            log.info("indexer starting pass 2 on %d uuids", len(invalidated))
-            audit_errors = indexer.update_audits(request, invalidated, xmin, snapshot_id)  # ignore restart
-            if len(audit_errors):
-                errors.extend(audit_errors)
 
         result = state.finish_cycle(result,errors)
 
@@ -916,10 +892,7 @@ class Indexer(object):
 
         last_exc = None
         try:
-            if self.use_2pass:
-                doc = request.embed('/%s/@@index-data/noaudit/' % uuid, as_user='INDEXER')
-            else:
-                doc = request.embed('/%s/@@index-data/' % uuid, as_user='INDEXER')
+            doc = request.embed('/%s/@@index-data/' % uuid, as_user='INDEXER')
         except StatementError:
             # Can't reconnect until invalid transaction is rolled back
             raise
@@ -928,17 +901,6 @@ class Indexer(object):
             last_exc = repr(e)
 
         if last_exc is None:
-            if self.use_2pass:
-                try:
-                    audit = self.es.get(index=self.index, id=str(uuid)).get('_source',{}).get('audit')  # Any version
-                    if audit:
-                        doc.update(
-                            audit=audit,
-                            audit_stale=True,
-                        )
-                except:
-                    pass
-
             for backoff in [0, 10, 20, 40, 80]:
                 time.sleep(backoff)
                 try:
@@ -967,6 +929,7 @@ class Indexer(object):
         timestamp = datetime.datetime.now().isoformat()
         return {'error_message': last_exc, 'timestamp': timestamp, 'uuid': str(uuid)}
 
+<<<<<<< HEAD
     def update_audits(self, request, uuids, xmin, snapshot_id=None):
         # Only called when use_2pass is True
         assert(self.use_2pass)
