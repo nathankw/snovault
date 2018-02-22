@@ -24,12 +24,15 @@ import logging
 import pytz
 import time
 import copy
+import os
+import resource
 
 es_logger = logging.getLogger("elasticsearch")
 es_logger.setLevel(logging.ERROR)
 log = logging.getLogger(__name__)
 SEARCH_MAX = 99999  # OutOfMemoryError if too high
 MAX_CLAUSES_FOR_ES = 8192
+WORKER_RSS_CAP = 3000000  # 3GB of ram.
 
 def includeme(config):
     config.add_route('index', '/index')
@@ -432,7 +435,15 @@ def index(request):
         ### OPTIONAL: audit via 2-pass is coming...
         #log.info("indexer starting pass 1 on %d uuids", len(invalidated))
         ### OPTIONAL: audit via 2-pass is coming...
-        errors = indexer.update_objects(request, invalidated, xmin, snapshot_id, restart)
+        #errors = indexer.update_objects(request, invalidated, xmin, snapshot_id, restart)
+        errors = []
+        while invalidated:
+            some_errors = indexer.update_objects(request, invalidated, xmin, snapshot_id, restart)
+            invalidated = []
+            for error in some_errors:
+                # These unindexed uuids were waiting on an worker that ran over the WORKER_RSS_CAP
+                invalidated.extend(error.pop('unindexed',[]))
+            errors.extend(some_errors)
 
         ### OPTIONAL: audit via 2-pass is coming...
         #result = state.start_pass2(result)
@@ -582,6 +593,14 @@ class Indexer(object):
                         id=str(uuid), version=xmin, version_type='external_gte',
                         request_timeout=30,
                     )
+                    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                    if rss > WORKER_RSS_CAP:
+                        err_msg = "Blew past cap of %.1fGB" % ((WORKER_RSS_CAP/1000000.0))
+                        log.error('PID:%d RSS:%d uuid:%s  *** %s ***' \
+                                    % (os.getpid(), rss, uuid, err_msg))
+                        timestamp = datetime.datetime.now().isoformat()
+                        err = {'error_message': err_msg, 'timestamp': timestamp, 'uuid': str(uuid)}
+                        raise UserWarning(err)
                 except StatementError:
                     # Can't reconnect until invalid transaction is rolled back
                     raise
