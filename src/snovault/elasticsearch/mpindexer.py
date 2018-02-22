@@ -114,16 +114,15 @@ def update_objects_in_snapshot(args):
         errors = []
         while uuids:
             uuid = uuids.pop(0)
-            try:
-                error = indexer.update_object(request, uuid, xmin, restart)
-                if error is not None:
+            error = indexer.update_object(request, uuid, xmin, restart)
+            if error is not None:
+                recycle = error.pop('recycle', None)
+                if recycle:
+                    if uuids:
+                        error['unindexed'] = uuids
                     errors.append(error)
-            except UserWarning as e:
-                error = e.args[0]
-                if uuids:
-                    error['unindexed'] = uuids
+                    break
                 errors.append(error)
-                break
 
         return errors
 

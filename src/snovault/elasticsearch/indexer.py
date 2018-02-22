@@ -32,7 +32,7 @@ es_logger.setLevel(logging.ERROR)
 log = logging.getLogger(__name__)
 SEARCH_MAX = 99999  # OutOfMemoryError if too high
 MAX_CLAUSES_FOR_ES = 8192
-WORKER_RSS_CAP = 3000000  # 3GB of ram.
+WORKER_RSS_CAP = 2000000  # 2GB of ram.
 
 def includeme(config):
     config.add_route('index', '/index')
@@ -444,6 +444,9 @@ def index(request):
                 # These unindexed uuids were waiting on an worker that ran over the WORKER_RSS_CAP
                 invalidated.extend(error.pop('unindexed',[]))
             errors.extend(some_errors)
+            uuid_count = len(invalidated)
+            if uuid_count:
+                log.warn("Indexing continues on %d uuids dropped by recycled workers" % (uuid_count))
 
         ### OPTIONAL: audit via 2-pass is coming...
         #result = state.start_pass2(result)
@@ -599,8 +602,7 @@ class Indexer(object):
                         log.error('PID:%d RSS:%d uuid:%s  *** %s ***' \
                                     % (os.getpid(), rss, uuid, err_msg))
                         timestamp = datetime.datetime.now().isoformat()
-                        err = {'error_message': err_msg, 'timestamp': timestamp, 'uuid': str(uuid)}
-                        raise UserWarning(err)
+                        return {'error_message': err_msg, 'timestamp': timestamp, 'uuid': str(uuid), 'recycle': True}
                 except StatementError:
                     # Can't reconnect until invalid transaction is rolled back
                     raise
