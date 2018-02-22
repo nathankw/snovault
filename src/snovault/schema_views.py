@@ -11,6 +11,7 @@ from .util import mutated_schema
 def includeme(config):
     config.add_route('schemas', '/profiles/')
     config.add_route('schema', '/profiles/{type_name}.json')
+    config.add_route('schemap', '/profiles/{type_name}')
     config.scan(__name__)
 
 
@@ -38,6 +39,8 @@ def _annotated_schema(type_info, request):
 
 
 @view_config(route_name='schema', request_method='GET',
+             decorator=etag_app_version_effective_principals)
+@view_config(route_name='schemap', request_method='GET',
              decorator=etag_app_version_effective_principals)
 def schema(context, request):
     type_name = request.matchdict['type_name']
